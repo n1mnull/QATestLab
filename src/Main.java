@@ -22,8 +22,7 @@ public class Main {
     private static BufferedReader bufferedReader = null;
     private static BufferedWriter bufferedWriter = null;
 
-    private static SimpleDateFormat sdf = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
-    private static SimpleDateFormat sdfYearMonthDay = new SimpleDateFormat("yyyy.MM.dd");
+    private static SimpleDateFormat sdfYearMonthDay = new SimpleDateFormat("yyyy.MM.dd HH:mm");
     private static SimpleDateFormat sdfMonthYear = new SimpleDateFormat("MM.yyyy");
     private static DecimalFormat df2 = new DecimalFormat("#.##");
 
@@ -41,6 +40,7 @@ public class Main {
             bufferedWriter = new BufferedWriter(new FileWriter((outFileName.equals("")) ? "c:\\output.txt" : outFileName));
 
             Calendar currentDate = (Calendar) BEGIN_MONTH.clone();
+
             /**
              * Создаем список случайных сотрудников
              */
@@ -52,47 +52,25 @@ public class Main {
             Employee freelancer = new Freelancer();
 
             while ((BEGIN_MONTH.get(Calendar.MONTH) + 1) > currentDate.get(Calendar.MONTH)) {
-//                bufferedWriter.write("Current date and time: " + sdfYearMonthDay.format(currentDate.getTime()) + "\r\n");
-                askDirectorForTask(currentDate);
+//                System.out.println("Current date and time: " + sdfYearMonthDay.format(currentDate.getTime()));
+
+                completeTaskInProcessStatus(currentDate);
+                selectEmployeeForTask(askDirectorForTask(currentDate));
 
                 for (Map.Entry<Task, Employee> entry : taskEmployeeMap.entrySet()) {
 
                     /**
-                     * Проверяем задания которые имеют статус InProcess на окончание времени для выполнения, и в случае если время на выполнение задание прошло
-                     * - меняем статус задания на TaskStatus.Completed
-                     * - меняем статус сотрудника на свободный для новой задачи
-                     */
-                    if (entry.getKey().getTaskStatus() == TaskStatus.InProcess) {
-                        if ((currentDate.getTimeInMillis() - entry.getKey().getCurrentDate().getTimeInMillis()) > entry.getKey().getTaskDuration() * 60 * 60 * 1000) {
-                            entry.getKey().setTaskStatus(TaskStatus.Completed);
-                            entry.getValue().setStatusEmployeeFree(true);
-                        }
-                    }
-                    /**
                      * Выбираем задания которые имеют статус New
                      */
                     if (entry.getKey().getTaskStatus() == TaskStatus.New) {
-                        Employee selectedEmployee = selectEmployeeForTask(entry.getKey());
-                        /**
-                         * Если для текущего задания выбран свободный сотрудник с имеющимися навыками
-                         * - вносим в карту taskEmployeeMap сотрудника выбраного в методе selectEmployeeForTask, теперь текущей задаче соответсвует один сотрудник
-                         * - высчитываем и вносим в данные задания цену выполнения текущим сотрудником
-                         * - изменяем статус работника на Занят выполнением задания
-                         * - изменение статуса задания на TaskStatus.InProcess
-                         */
-                        if (selectedEmployee != null) {
-                            entry.setValue(selectedEmployee); //
-                            entry.getKey().setSalaryForTask(calculateSalary(entry.getKey(), entry.getValue()));
-                            selectedEmployee.setStatusEmployeeFree(false); //
-                            entry.getKey().setTaskStatus(TaskStatus.InProcess);
-                        }
+
                         /**
                          * Если для текущего задания нет свободного сотрудника
                          * - вносим в карту taskEmployeeMap данные что данная задача передана на фриланс
                          * - высчитываем и вносим в данные задания цену выполнения фрилансером
                          * - изменение статуса задания на TaskStatus.InProcess
                          */
-                        else {
+                        if (entry.getValue() == null) {
                             if (!entry.getKey().getTaskType().equals(TaskType.OfficeCleaning)) {
                                 entry.setValue(freelancer);
                                 entry.getKey().setSalaryForTask(calculateSalary(entry.getKey(), freelancer));
@@ -121,7 +99,7 @@ public class Main {
                  * - расчет бухгалтером оплаты за день выполненения работы фрилансерами
                  */
                 if (currentDate.get(Calendar.HOUR_OF_DAY) == 00) {
-                    renewHoursToEmployee(currentDate); //
+                    renewHoursToEmployee(currentDate);
                     calculateFreelanceDaySalary((Calendar) currentDate.clone());
 
                     /**
@@ -152,9 +130,40 @@ public class Main {
     }
 
     /**
+     * Проверяем задания которые имеют статус InProcess на окончание времени для выполнения, и в случае если время на выполнение задание прошло
+     * - меняем статус задания на TaskStatus.Completed
+     * - меняем статус сотрудника на свободный для новой задачи
+     */
+    private static void completeTaskInProcessStatus(Calendar currentDate) {
+
+        for (Map.Entry<Task, Employee> entry : taskEmployeeMap.entrySet()) {
+            if (entry.getKey().getTaskStatus() == TaskStatus.InProcess) {
+                if ((currentDate.getTimeInMillis() - entry.getKey().getCurrentDate().getTimeInMillis()) > entry.getKey().getTaskDuration() * 60 * 60 * 1000) {
+                    entry.getKey().setTaskStatus(TaskStatus.Completed);
+                    entry.getValue().setStatusEmployeeFree(true);
+                }
+            }
+        }
+    }
+
+    /**
+     * Выбираем в список всех сотрудников у которых статус - Сводобен для новой задачи
+     */
+    private static List<Employee> selectAllFreeEmployees() {
+        List<Employee> freeEmployeesList = new ArrayList<>();
+        for (int i = 0; i < employeeList.size(); i++) {
+            if (employeeList.get(i).isStatusEmployeeFree()) {
+                freeEmployeesList.add(employeeList.get(i));
+            }
+        }
+        return freeEmployeesList;
+    }
+
+    /**
      * Метод для подсчета и формирования отчетности бухгалтером за месяц
+     *
      * @param currentDate - передается текущая дата отчета
-     * в результате в файл записывается данные по всем сотрудникам, их заработная плата и количество часов потраченых на выполнение заданий
+     *                    в результате в файл записывается данные по всем сотрудникам, их заработная плата и количество часов потраченых на выполнение заданий
      */
     private static void calculateEmployeeMonthSalary(Calendar currentDate) throws IOException {
         currentDate.add(Calendar.HOUR_OF_DAY, -1);
@@ -199,11 +208,12 @@ public class Main {
         bufferedWriter.write("Freelancer has salary = " + df2.format(sumSalaryFreelancer) + "$, work time = " + Task.convertDoubleToHoursMinute(sumTimeFreelancer) + "\r\n");
 
 //        System.out.println("All salary = " + df2.format(allSalary+sumSalaryFreelancer) + "$, all work time = " + Task.convertDoubleToHoursMinute(allTimeTask+sumTimeFreelancer));
-        bufferedWriter.write("All salary = " + df2.format(allSalary+sumSalaryFreelancer) + "$, all work time = " + Task.convertDoubleToHoursMinute(allTimeTask+sumTimeFreelancer) + "\r\n");
+        bufferedWriter.write("All salary = " + df2.format(allSalary + sumSalaryFreelancer) + "$, all work time = " + Task.convertDoubleToHoursMinute(allTimeTask + sumTimeFreelancer) + "\r\n");
     }
 
     /**
      * Метод для подсчета и формирования отчетности бухгалтером за неделю
+     *
      * @param currentDate - передается текущая дата отчета
      */
     private static void calculateEmployeeWeekSalary(Calendar currentDate) throws IOException {
@@ -228,6 +238,7 @@ public class Main {
 
     /**
      * Метод для подсчета и формирования отчетности бухгалтером для фрилансеров за день
+     *
      * @param currentDate - передается текущая дата отчета
      */
     private static void calculateFreelanceDaySalary(Calendar currentDate) throws IOException {
@@ -244,9 +255,11 @@ public class Main {
         }
 //        bufferedWriter.write(sdfYearMonthDay.format(currentDate.getTime()) + " salary freelancers equals " + df2.format(sumSalary) + ", work time = " + Task.convertDoubleToHoursMinute(sumTime) + "\r\n");
     }
+
     /**
      * Метод для обновления дневного счетчика рабочего времени у всех рабочих
      * так же, если текущий день недели совпадает с днем недели начала месяца то обновляется и недельный счетчик рабочего времени
+     *
      * @param currentDate - передается текущая дата отчета
      */
     private static void renewHoursToEmployee(Calendar currentDate) {
@@ -265,34 +278,39 @@ public class Main {
      * Метод для опроса всех сотрудников с навыком Директор для получения новых задач
      * каждая выдача новых задач уменьшает на 1 час счетчик оставшегося времени у сотрудника
      * новые задачи заносятся в карту заданий и исполнителей, в качестве исполнителя вносится null, чтобы указать что данная задача не была передана сотрудникам или фрилансерам
+     *
      * @param currentDate - передается текущая дата отчета
      */
-    private static void askDirectorForTask(Calendar currentDate) {
-        List<Task> tempTasks;
+    private static List<Task> askDirectorForTask(Calendar currentDate) {
+        List<Task> newTasks;
+        List<Task> taskList = new ArrayList<>();
+
         for (int i = 0; i < employeeList.size(); i++) {
             if ((employeeList.get(i).getSetProfessions().contains(EmployeeType.Director)) && (employeeList.get(i).getTimeLeftWorkDay() > 1)) {
-                employeeList.get(i).setTimeLeftWorkDay(employeeList.get(i).getTimeLeftWorkDay() - 1); // выдача задания отнимает у Директора 1 час его времени
-                tempTasks = Director.generateTasksEveryHour(currentDate);
-                for (int j = 0; j < tempTasks.size(); j++)
-                    taskEmployeeMap.put(tempTasks.get(j), null);
+                employeeList.get(i).setTimeLeftWorkDay(employeeList.get(i).getTimeLeftWorkDay() - 1);
+                newTasks = Director.generateTasksEveryHour(currentDate);
+                for (int j = 0; j < newTasks.size(); j++)
+                    taskList.add(newTasks.get(j));
             }
         }
+        return taskList;
     }
 
     /**
      * Метод для расчета затрат на выполнения задания
      * - расчитвается для почасовой работы сотрудниками и фрилансерами
      * - в случае работы в выходные стоимость выполнения задания увеличивается в 2 раза
-     * @param task - передается задача
+     *
+     * @param task     - передается задача
      * @param employee - передается сотрудник, который будет выполнять задачу
-    */
+     */
     private static double calculateSalary(Task task, Employee employee) {
         double salary = 0.0d;
         EmployeeType employeeType = task.getTaskType().getEmployeeType();
         if ((employeeType.getSalaryType().equals(SalaryType.HourlyPayment))) {
             salary = task.getTaskDuration() * employeeType.getEmployeeSalary();
         }
-        if ((employee.getClass().equals(Freelancer.class))){
+        if ((employee.getClass().equals(Freelancer.class))) {
             salary = task.getTaskDuration() * EmployeeType.valueOf(employee.getClass().getSimpleName()).getEmployeeSalary();
         }
         return salary * (task.isWeekendTask() ? 2 : 1);
@@ -300,29 +318,62 @@ public class Main {
 
     /**
      * Метод для выбора для задания сотрудника
-     * - выбирается сотрудник, который не занят выполнением других заданий
-     * - у которого есть специальность необходимая для выполнения задания
+     * - выбираются все сотрудники, которые не заняты выполнением других заданий
+     * - проверяем свотрудников чтобы у него была специальность необходимая для выполнения задания
      * - у которого счетчики оставшегося времени позволяют выполнить текущее задание
-     * Если все условия соблюдены - то у текущего сотрудника уменьшаются счетчики оставшегося времени на день и месяц
-     * * @param task - передается задача для которой необходимо выбрать сотрудника, или вернуть null если такого не обнаружено
+     * Если выбранному сотруднику найдено лучшее задание, то
+     * - вносим в карту taskEmployeeMap сотрудника и задачу, которая наиболее подходит по критериям поиска
+     * - изменяем статус задания на TaskStatus.InProcess
+     * - высчитываем и вносим в данные задания цену выполнения текущим сотрудником
+     * - изменяем статус работника на Занят выполнением задания
+     * - уменьшаем счетчики оставшегося времени на день и месяц
+     * Все задания для которых не найден сотрудник, который может приступить к работе сразу, заносятся в карту taskEmployeeMap с значением null на место сотрудника.
+     * * @param List<Task> taskList - передается список заданий среди которых будут выбраны все со статусом TaskStatus.New и выбрана будет задача оптимально подходящая к сотруднику
      */
-    private static Employee selectEmployeeForTask(Task task) {
+    private static void selectEmployeeForTask(List<Task> taskList) {
 
-        EmployeeType employeeType = task.getTaskType().getEmployeeType();
-        Employee selectedEmployee = null;
+        List<Employee> freeEmployeeList = selectAllFreeEmployees();
 
-        for (int i = 0; i < employeeList.size(); i++) {
-            if ((employeeList.get(i).isStatusEmployeeFree()) && (employeeList.get(i).getSetProfessions().contains(employeeType))) {
-                if ((employeeList.get(i).getTimeLeftWorkDay() > task.getTaskDuration()) && (employeeList.get(i).getTimeLeftWorkWeek() > task.getTaskDuration())) {
-                    selectedEmployee = employeeList.get(i);
-                    selectedEmployee.setTimeLeftWorkDay(selectedEmployee.getTimeLeftWorkDay() - task.getTaskDuration()); //
-                    selectedEmployee.setTimeLeftWorkWeek(selectedEmployee.getTimeLeftWorkWeek() - task.getTaskDuration()); //
-                    break;
+        int indexNumber = -1;
+        TaskPriority flagTaskPriority = TaskPriority.LowPriority;
+        double flagSalary = 0;
+
+        for (int i = 0; i < freeEmployeeList.size(); i++) {
+            for (int j = 0; j < taskList.size(); j++) {
+                if ((taskList.get(j).getTaskStatus() == TaskStatus.New) && (freeEmployeeList.get(i).getSetProfessions().contains(taskList.get(j).getTaskType().getEmployeeType()))) {
+                    if ((freeEmployeeList.get(i).getTimeLeftWorkDay() > taskList.get(j).getTaskDuration()) && (freeEmployeeList.get(i).getTimeLeftWorkWeek() > taskList.get(j).getTaskDuration())) {
+                        if (taskList.get(j).getTaskPriority().ordinal() > flagTaskPriority.ordinal()) {
+                            flagTaskPriority = taskList.get(j).getTaskPriority();
+                            flagSalary = calculateSalary(taskList.get(j), freeEmployeeList.get(i));
+                            indexNumber = j;
+                        }
+                        if ((calculateSalary(taskList.get(j), freeEmployeeList.get(i)) > flagSalary) && (taskList.get(j).getTaskPriority().ordinal() == flagTaskPriority.ordinal())) {
+                            flagSalary = calculateSalary(taskList.get(j), freeEmployeeList.get(i));
+                            indexNumber = j;
+                        }
+                    }
                 }
             }
+            if (indexNumber != -1) {
+                taskEmployeeMap.put(taskList.get(indexNumber), freeEmployeeList.get(i));
+                taskList.get(indexNumber).setTaskStatus(TaskStatus.InProcess);
+                taskList.get(indexNumber).setSalaryForTask(calculateSalary(taskList.get(indexNumber), freeEmployeeList.get(i)));
+                freeEmployeeList.get(i).setStatusEmployeeFree(false);
+                freeEmployeeList.get(i).setTimeLeftWorkDay(freeEmployeeList.get(i).getTimeLeftWorkDay() - taskList.get(indexNumber).getTaskDuration());
+                freeEmployeeList.get(i).setTimeLeftWorkWeek(freeEmployeeList.get(i).getTimeLeftWorkWeek() - taskList.get(indexNumber).getTaskDuration());
+                indexNumber = -1;
+                flagTaskPriority = TaskPriority.LowPriority;
+                flagSalary = 0;
+            }
         }
-        return selectedEmployee;
+
+        for (int j = 0; j < taskList.size(); j++) {
+            if (taskList.get(j).getTaskStatus() == TaskStatus.New) {
+                taskEmployeeMap.put(taskList.get(j), null);
+            }
+        }
     }
+
     /**
      * Метод генерации списка сотрудников с возможными должностями и специализациями
      * в фирме должны быть хотя бы один Директор, Менеджер и Бухгалтер
@@ -359,10 +410,10 @@ public class Main {
             }
             amountEmployee--;
         }
-
-//        bufferedWriter.write("List of Employee in office (" + employeeList.size() + "pcs.): " + "\r\n");
-//        for (int i = 0; i < employeeList.size(); i++) {
-//            bufferedWriter.write(employeeList.get(i) + " with list positions: " + employeeList.get(i).getSetProfessions().toString() + "\r\n");
-//        }
+        bufferedWriter.write("List of Employee in office (" + employeeList.size() + "pcs.): " + "\r\n");
+        for (int i = 0; i < employeeList.size(); i++) {
+            System.out.println(employeeList.get(i) + " with list positions: " + employeeList.get(i).getSetProfessions().toString());
+            bufferedWriter.write(employeeList.get(i) + " with list positions: " + employeeList.get(i).getSetProfessions().toString() + "\r\n");
+        }
     }
 }
